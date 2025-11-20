@@ -10,6 +10,11 @@ if (!token) {
 
 const bot = new Telegraf(token);
 
+// 🔹 ID/username канала или группы
+// Можно использовать '@cellular_installers', если это публичный канал/группа.
+// Для надёжности лучше подставить numeric chat_id, если знаешь.
+const CHANNEL_ID = '@cellular_installers';
+
 enum Mode {
     RTN9xx = 'RTN9xx (XMC)',
     RTN380 = 'RTN380 (E-band)',
@@ -74,20 +79,98 @@ function getKeyboard() {
     return Markup.keyboard([[Mode.RTN9xx, Mode.RTN380], [Mode.Custom]]).resize();
 }
 
+// Кнопка «Подписаться»
+function getSubscribeKeyboard() {
+    return Markup.inlineKeyboard([
+        [Markup.button.url('🔔 Подписаться на канал', 'https://t.me/cellular_installers')]
+    ]);
+}
+
+// Быстрая проверка: является ли пользователь участником
+async function isSubscribed(ctx: any): Promise<boolean> {
+    if (!ctx.from) return false;
+
+    try {
+        const member = await ctx.telegram.getChatMember(CHANNEL_ID, ctx.from.id);
+        const status = member.status; // 'creator' | 'administrator' | 'member' | 'restricted' | 'left' | 'kicked'
+        return status === 'creator' || status === 'administrator' || status === 'member';
+    } catch (e) {
+        console.error('getChatMember error:', e);
+        // Если бот не может проверить (например, не в канале) – считаем, что не подписан
+        return false;
+    }
+}
+
 bot.start((ctx) => {
     const mode = getUserMode(ctx.from.id);
     ctx.reply(
-        `Привет! Я бот Huawei RSSI → RSL.\nТекущий режим: *${mode}*.\n\nВведите напряжение RSSI (в Вольтах), например: 2.8`,
-        { parse_mode: 'Markdown', ...getKeyboard() }
+        `Привет! Я бот Huawei RSSI → RSL.\nТекущий режим: *${mode}*.\n\n` +
+        `Чтобы пользоваться ботом, подпишитесь на канал @cellular_installers.\n` +
+        `После подписки просто снова отправьте /start.\n\n` +
+        `Введите напряжение RSSI (в Вольтах), например: 2.8`,
+        {
+            parse_mode: 'Markdown',
+            ...getKeyboard(),
+            reply_markup: {
+                ...getKeyboard().reply_markup,
+                inline_keyboard: getSubscribeKeyboard().reply_markup.inline_keyboard
+            }
+        } as any
     );
 });
 
 bot.help((ctx) => {
     ctx.reply(
-        `*Инструкция:*\n\n1. Подключите мультиметр к BNC-разъему RSSI на ODU Huawei.\n2. Измерьте напряжение в Вольтах (обычно 0.8–4.5 В).\n3. Отправьте это значение сюда — я переведу его в RSL (в dBm).\n\nВыберите серию оборудования:\n• RTN9xx (ODU XMC): типовая таблица Huawei.\n• RTN380 (E-band): 0.84В = –78 dBm, 4.2В = –21 dBm.\n\nДля пользовательской калибровки отправьте:\ncustom v1 rsl1 v2 rsl2 [...vN rslN]\nНапример:\ncustom 0.5 -80 4.5 -20`,
-        { parse_mode: 'Markdown', ...getKeyboard() }
+        `*Инструкция:*\n\n` +
+        `1. Подключите мультиметр к BNC-разъему RSSI на ODU Huawei.\n` +
+        `2. Измерьте напряжение в Вольтах (обычно 0.8–4.5 В).\n` +
+        `3. Отправьте это значение сюда — я переведу его в RSL (в dBm).\n\n` +
+        `Выберите серию оборудования:\n` +
+        `• RTN9xx (ODU XMC): типовая таблица Huawei.\n` +
+        `• RTN380 (E-band): 0.84В = –78 dBm, 4.2В = –21 dBm.\n\n` +
+        `Для пользовательской калибровки отправьте:\n` +
+        `custom v1 rsl1 v2 rsl2 [...vN rslN]\n` +
+        `Например:\n` +
+        `custom 0.5 -80 4.5 -20\n\n` +
+        `Для доступа ко всем функциям подпишитесь на канал @cellular_installers.`,
+        {
+            parse_mode: 'Markdown',
+            ...getKeyboard(),
+            reply_markup: {
+                ...getKeyboard().reply_markup,
+                inline_keyboard: getSubscribeKeyboard().reply_markup.inline_keyboard
+            } as any
+        }
     );
 });
+
+// Middleware проверки подписки
+bot.use(async (ctx, next) => {
+    // Системные апдейты (callback_query, inline_query и т.п.) можно пропускать как есть
+    if (!ctx.from) {
+        return next();
+    }
+
+    // Забираем текст, если это message с текстом
+    const text = (ctx.message as any)?.text as string | undefined;
+
+    // /start и /help всегда доступны
+    if (text && (text.startsWith('/start') || text.startsWith('/help'))) {
+        return next();
+    }
+
+    const subscribed = await isSubscribed(ctx);
+    if (!subscribed) {
+        await ctx.reply(
+            '🚫 Чтобы пользоваться ботом, подпишитесь на канал @cellular_installers, а затем повторите попытку.',
+            getSubscribeKeyboard()
+        );
+        return;
+    }
+
+    return next();
+});
+
 
 bot.hears([Mode.RTN9xx, Mode.RTN380, Mode.Custom], (ctx) => {
     const selected = ctx.message.text as Mode;
@@ -152,7 +235,7 @@ bot.on('text', (ctx) => {
         case Mode.RTN380:
             rsl = interpolate(voltage, calib380);
             break;
-        case Mode.Custom:
+        case Mode.Custom: {
             const points = userCustomCalib.get(userId);
             if (!points || points.length < 2) {
                 ctx.reply('⚠️ Пользовательская калибровка не задана. Используйте команду custom ...');
@@ -160,6 +243,9 @@ bot.on('text', (ctx) => {
             }
             rsl = interpolate(voltage, points);
             break;
+        }
+        default:
+            rsl = NaN;
     }
 
     ctx.reply(`📡 Режим: ${mode}\nU_RSSI = ${voltage.toFixed(2)} В\nRSL ≈ ${rsl.toFixed(1)} dBm`);
