@@ -29,7 +29,7 @@ interface CalibPoint {
 const userModes = new Map<number, Mode>();
 const userCustomCalib = new Map<number, CalibPoint[]>();
 
-const calib9xx = [
+const calib9xx: CalibPoint[] = [
     { voltage: 0.10, rsl: -90 },
     { voltage: 0.41, rsl: -85 },
     { voltage: 0.73, rsl: -80 },
@@ -44,10 +44,10 @@ const calib9xx = [
     { voltage: 3.56, rsl: -35 },
     { voltage: 3.87, rsl: -30 },
     { voltage: 4.19, rsl: -25 },
-    { voltage: 4.50, rsl: -20 }
+    { voltage: 4.50, rsl: -20 },
 ];
 
-const calib380 = [
+const calib380: CalibPoint[] = [
     { voltage: 0.84, rsl: -78 },
     { voltage: 4.20, rsl: -21 },
 ];
@@ -82,7 +82,7 @@ function getKeyboard() {
 // Кнопка «Подписаться»
 function getSubscribeKeyboard() {
     return Markup.inlineKeyboard([
-        [Markup.button.url('🔔 Подписаться на канал', 'https://t.me/cellular_installers')]
+        [Markup.button.url('🔔 Подписаться на канал', 'https://t.me/cellular_installers')],
     ]);
 }
 
@@ -101,27 +101,31 @@ async function isSubscribed(ctx: any): Promise<boolean> {
     }
 }
 
-bot.start((ctx) => {
+bot.start(async (ctx) => {
     const mode = getUserMode(ctx.from.id);
-    ctx.reply(
-        `Привет! Я бот Huawei RSSI → RSL.\nТекущий режим: *${mode}*.\n\n` +
+
+    await ctx.reply(
+        `Привет! Я бот Huawei RSSI → RSL.\n` +
+        `Текущий режим: <b>${mode}</b>.\n\n` +
         `Чтобы пользоваться ботом, подпишитесь на канал @cellular_installers.\n` +
         `После подписки просто снова отправьте /start.\n\n` +
         `Введите напряжение RSSI (в Вольтах), например: 2.8`,
         {
-            parse_mode: 'Markdown',
+            parse_mode: 'HTML',
             ...getKeyboard(),
-            reply_markup: {
-                ...getKeyboard().reply_markup,
-                inline_keyboard: getSubscribeKeyboard().reply_markup.inline_keyboard
-            }
-        } as any
+        } as any,
+    );
+
+    // Отдельным сообщением — кнопка подписки
+    await ctx.reply(
+        'Для доступа ко всем функциям подпишитесь на канал:',
+        getSubscribeKeyboard(),
     );
 });
 
-bot.help((ctx) => {
-    ctx.reply(
-        `*Инструкция:*\n\n` +
+bot.help(async (ctx) => {
+    await ctx.reply(
+        `<b>Инструкция:</b>\n\n` +
         `1. Подключите мультиметр к BNC-разъему RSSI на ODU Huawei.\n` +
         `2. Измерьте напряжение в Вольтах (обычно 0.8–4.5 В).\n` +
         `3. Отправьте это значение сюда — я переведу его в RSL (в dBm).\n\n` +
@@ -129,18 +133,19 @@ bot.help((ctx) => {
         `• RTN9xx (ODU XMC): типовая таблица Huawei.\n` +
         `• RTN380 (E-band): 0.84В = –78 dBm, 4.2В = –21 dBm.\n\n` +
         `Для пользовательской калибровки отправьте:\n` +
-        `custom v1 rsl1 v2 rsl2 [...vN rslN]\n` +
+        `<code>custom v1 rsl1 v2 rsl2 [...vN rslN]</code>\n` +
         `Например:\n` +
-        `custom 0.5 -80 4.5 -20\n\n` +
+        `<code>custom 0.5 -80 4.5 -20</code>\n\n` +
         `Для доступа ко всем функциям подпишитесь на канал @cellular_installers.`,
         {
-            parse_mode: 'Markdown',
+            parse_mode: 'HTML',
             ...getKeyboard(),
-            reply_markup: {
-                ...getKeyboard().reply_markup,
-                inline_keyboard: getSubscribeKeyboard().reply_markup.inline_keyboard
-            } as any
-        }
+        } as any,
+    );
+
+    await ctx.reply(
+        'Кнопка для подписки на канал:',
+        getSubscribeKeyboard(),
     );
 });
 
@@ -163,7 +168,7 @@ bot.use(async (ctx, next) => {
     if (!subscribed) {
         await ctx.reply(
             '🚫 Чтобы пользоваться ботом, подпишитесь на канал @cellular_installers, а затем повторите попытку.',
-            getSubscribeKeyboard()
+            getSubscribeKeyboard(),
         );
         return;
     }
@@ -171,22 +176,24 @@ bot.use(async (ctx, next) => {
     return next();
 });
 
-
 bot.hears([Mode.RTN9xx, Mode.RTN380, Mode.Custom], (ctx) => {
     const selected = ctx.message.text as Mode;
     setUserMode(ctx.from.id, selected);
 
     let hint = 'Отправьте напряжение RSSI (в Вольтах), например: 2.8';
     if (selected === Mode.Custom) {
-        hint = `Отправьте свою калибровку:
-custom v1 rsl1 v2 rsl2 [...vN rslN]
-Например: custom 0.5 -80 4.5 -20`;
+        hint = `Отправьте свою калибровку:\n` +
+            `custom v1 rsl1 v2 rsl2 [...vN rslN]\n` +
+            `Например: custom 0.5 -80 4.5 -20`;
     }
 
-    ctx.reply(`Режим переключён на: *${selected}*\n\n${hint}`, {
-        parse_mode: 'Markdown',
-        ...getKeyboard(),
-    });
+    ctx.reply(
+        `Режим переключён на: <b>${selected}</b>\n\n${hint}`,
+        {
+            parse_mode: 'HTML',
+            ...getKeyboard(),
+        } as any,
+    );
 });
 
 bot.on('text', (ctx) => {
@@ -194,12 +201,14 @@ bot.on('text', (ctx) => {
     const input = raw.replace(',', '.');
     const userId = ctx.from.id;
 
+    // Пользовательская калибровка
     if (raw.toLowerCase().startsWith('custom')) {
         const parts = input.split(/\s+/).slice(1);
         if (parts.length < 4 || parts.length % 2 !== 0) {
             ctx.reply('⚠️ Введите хотя бы две пары значений: custom v1 rsl1 v2 rsl2 ...');
             return;
         }
+
         const points: CalibPoint[] = [];
         for (let i = 0; i < parts.length; i += 2) {
             const voltage = parseFloat(parts[i]);
@@ -210,6 +219,7 @@ bot.on('text', (ctx) => {
             }
             points.push({ voltage, rsl });
         }
+
         points.sort((a, b) => a.voltage - b.voltage);
         userCustomCalib.set(userId, points);
         setUserMode(userId, Mode.Custom);
@@ -217,6 +227,7 @@ bot.on('text', (ctx) => {
         return;
     }
 
+    // Обычное напряжение
     if (!/^\d+(\.\d+)?$/.test(input)) return;
 
     const voltage = parseFloat(input);
@@ -248,7 +259,11 @@ bot.on('text', (ctx) => {
             rsl = NaN;
     }
 
-    ctx.reply(`📡 Режим: ${mode}\nU_RSSI = ${voltage.toFixed(2)} В\nRSL ≈ ${rsl.toFixed(1)} dBm`);
+    ctx.reply(
+        `📡 Режим: ${mode}\n` +
+        `U_RSSI = ${voltage.toFixed(2)} В\n` +
+        `RSL ≈ ${rsl.toFixed(1)} dBm`,
+    );
 });
 
 bot.launch().then(() => console.log('✅ RSSI Bot started'));
