@@ -25,12 +25,21 @@ const userModes = new Map<number, Mode>();
 const userCustomCalib = new Map<number, CalibPoint[]>();
 
 const calib9xx = [
-    { voltage: 0.1, rsl: -90 },
-    { voltage: 1.0, rsl: -76 },
-    { voltage: 2.0, rsl: -60 },
-    { voltage: 3.0, rsl: -45 },
-    { voltage: 4.0, rsl: -30 },
-    { voltage: 4.5, rsl: -20 },
+    { voltage: 0.10, rsl: -90 },
+    { voltage: 0.41, rsl: -85 },
+    { voltage: 0.73, rsl: -80 },
+    { voltage: 1.04, rsl: -75 },
+    { voltage: 1.36, rsl: -70 },
+    { voltage: 1.67, rsl: -65 },
+    { voltage: 1.99, rsl: -60 },
+    { voltage: 2.30, rsl: -55 },
+    { voltage: 2.61, rsl: -50 },
+    { voltage: 2.93, rsl: -45 },
+    { voltage: 3.24, rsl: -40 },
+    { voltage: 3.56, rsl: -35 },
+    { voltage: 3.87, rsl: -30 },
+    { voltage: 4.19, rsl: -25 },
+    { voltage: 4.50, rsl: -20 }
 ];
 
 const calib380 = [
